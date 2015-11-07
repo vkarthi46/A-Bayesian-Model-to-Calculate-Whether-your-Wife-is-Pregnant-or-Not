@@ -1,0 +1,67 @@
+# R Codes
+
+period_onset <- as.Date(c("2014-07-02", "2014-08-02", "2014-08-29", "2014-09-25",
+                          "2014-10-24", "2014-11-20", "2014-12-22", "2015-01-19"))
+days_between_periods <- as.numeric(diff(period_onset))
+
+calc_log_like <- function(days_since_last_period, days_between_periods,
+                          mean_period, sd_period, next_period,
+                          is_fertile, is_pregnant) {
+  n_non_pregnant_periods <- length(days_between_periods)
+  log_like <- 0
+  if(n_non_pregnant_periods > 0) {
+    log_like <- log_like + sum( dnorm(days_between_periods, mean_period, sd_period, log = TRUE) )
+  }
+  log_like <- log_like + log( (1 - 0.19 * is_fertile)^n_non_pregnant_periods )
+  if(!is_pregnant && next_period < days_since_last_period) {
+    log_like <- -Inf
+  }
+  log_like
+}
+
+prop_not_preg_12_cycles <- c("19-26 years" = 0.08,
+                             "27-34 years" = 0.13,
+                             "35-39 years" = 0.18)
+                             
+ 1 - (prop_not_preg_12_cycles - 0.05)^(1/12)
+ 
+ 
+ 
+ sample_from_prior <- function(n) {
+  prior <- data.frame(mean_period = rnorm(n, 27.7, 2.4),
+                      sd_period   = abs(rnorm(n, 0, 2.05)),
+                      is_fertile  = rbinom(n, 1, 0.95))
+  prior$is_pregnant <- rbinom(n, 1, 0.19 * prior$is_fertile)
+  prior$next_period <- rnorm(n, prior$mean_period, prior$sd_period)
+  prior$next_period[prior$is_pregnant == 1] <- NA
+  prior
+}
+
+sample_from_prior(n = 4)
+
+
+sample_from_posterior <- function(days_since_last_period, days_between_periods, n_samples) {
+  prior <- sample_from_prior(n_samples)
+  log_like <- sapply(1:n_samples, function(i) {
+    calc_log_like(days_since_last_period, days_between_periods,
+                  prior$mean_period[i], prior$sd_period[i], prior$next_period[i],
+                  prior$is_fertile[i], prior$is_pregnant[i])
+  })
+  posterior <- prior[ sample(n_samples, replace = TRUE, prob = exp(log_like)), ]
+  posterior
+}
+
+
+
+post <- sample_from_posterior(33, days_between_periods, n_samples = 100000)
+
+head(post)
+
+mean(post$is_fertile)
+
+mean(post$is_pregnant)
+
+post <- sample_from_posterior(35, days_between_periods, n_samples = 100000)
+mean(post$is_pregnant)
+
+
